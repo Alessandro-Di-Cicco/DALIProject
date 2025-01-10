@@ -6,3 +6,4 @@ I had some issues getting the project to work with tmux, so I employed an older 
 ## Credits
 This project was developed using the DALI platform for the creation of MASs.
 DALI is available at: https://github.com/AAAI-DISIM-UnivAQ/DALI
+it was developed by UNIVAQ's DISIM: https://www.disim.univaq.it
