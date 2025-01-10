@@ -1,0 +1,69 @@
+:-dynamic phase/1.
+:-dynamic state/1.
+:-dynamic current_position/1.
+:-dynamic delivering/4.
+
+/*
+    TODO: start a timer that asks a warehouse and then delivers.
+            send message to coordinator to free up itself once it delivers.
+*/
+
+phase(init).
+phaseI(init):> messageA(coordinator, send_message(delivery_ready(Me), Me)).
+ready_receivedE:> retract(phase(init)), format('Synced with coordinator~n', []).
+
+/* Delivery request acceptance */
+new_deliveryE(Location, Warehouse, Resource, Quantity):>   
+    \+ state(busy),
+    format('Accepted delivery for ~w ~w from ~w to ~w~n', [Quantity, Resource, Warehouse, Location]),
+    messageA(coordinator, send_message(driver_accepts(Me, Location, Warehouse, Resource, Quantity), Me)),
+
+    assert(busy),
+    assert(delivering(Location, Warehouse, Resource, Quantity)),
+
+    random(1, 8, RandNum),
+    format('Waiting for ~w secs ~n', [RandNum]),
+    sleep(RandNum),
+
+    format('Asking the warehouse ~n', []),
+    messageA(Warehouse, send_message(ask(Resource, Quantity, Me), Me)).
+
+/* Delivery request rejection */
+new_deliveryE(Location, Warehouse, Resource, Quantity):>   
+    state(busy),
+    format('Refusing delivery for ~w ~w from ~w to ~w~n', [Quantity, Resource, Warehouse, Location]),
+    messageA(coordinator, send_message(driver_busy(Me, Location, Warehouse, Resource, Quantity), Me)).
+
+
+material_givenE:>
+    delivering(Location, Warehouse, Resource, Quantity),
+    format('Warehouse provided ~w ~w~n', [Amount, Resource]),
+    random(1, 8, RandNum),
+    sleep(RandNum),
+
+    delivering(Location, Warehouse, Resource, Quantity),
+    format('Delivery completed, ~w reached~n', [Location]),
+
+    retract(delivering(Location, Warehouse, Resource, Quantity)),
+
+    current_position(OldPos),
+    retract(current_position(OldPos)),
+    assert(current_position(Location)),
+    messageA(coordinator, send_message(driver_location(Me, Location), Me)).
+
+
+material_deniedE:>
+    format('Error: the warehouse did not have the requested materials, aborting delivery~n', []),
+    delivering(Location, Warehouse, Resource, Quantity),
+    retract(delivering(Location, Warehouse, Resource, Quantity)).
+
+
+pos_updateE(Where):> 
+    format('Moving to ~w~n', [Where]),
+    (current_position(Other) -> retract(current_position(Other)); true),
+    assert(current_position(Where)),
+    messageA(coordinator, send_message(driver_location(Me, Where), Me)).
+
+/* This is here to allow to create a desynchronized state between drivers and the coordinator from
+the user's terminal, to showcase re-sync mechanisms */
+set_busyE:> assert(state(busy)).

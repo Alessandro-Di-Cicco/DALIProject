@@ -1,0 +1,53 @@
+:-dynamic owns/2.
+:-dynamic in_request/3.
+:-dynamic phase/1.
+
+/*
+To shut down waiting connections:
+sudo ss --tcp state TIME-WAIT --kill
+*/
+
+phase(init).
+phaseI(init):> messageA(coordinator, send_message(warehouse_ready(Me), Me)).
+ready_receivedE:> retract(phase(init)), format('Synced with coordinator~n', []).
+
+
+askE(M, Q, Sender):> 
+    owns(M, P), P>=Q ,format('Providing ~w ~w~n', [M, Q]),
+    retract(owns(M, P)), New is P-Q, assert(owns(M, New)),
+    give(R, Q, Sender).
+
+askE(M, Q, Sender):> 
+    owns(M, P), P<Q, format('Rejecting for lack of material ~w ~w~n', [M, Q]),
+    deny(M, Q, Sender).
+
+askE(M, Q, Sender):>
+    \+ owns(M, _),
+    format('Rejecting as material is not in stock ~w ~w~n', [M, Q]),
+    deny(M, Q, Sender).
+
+
+give(R, Q, Sender):- 
+    messageA(Sender, send_message(material_given, Me)).
+
+deny(R, Q, Sender):- 
+    messageA(Sender, send_message(material_denied, Me)).
+
+update_coordinator(Resource, Qty):- 
+    messageA(coordinator, send_message(warehouse_update(Me, Resource, Qty), Me)).
+
+/* Mechanism for filling the warehouse */
+restockE(Resource, Qty):>   owns(Resource, Q),
+                            P is Q + Qty,
+                            retract(owns(Resource, Q)),
+                            assert(owns(Resource, P)),
+                            format('Refilled ~w by ~w, now at ~w~n', [Resource, Qty, P]),
+                            update_coordinator(Resource, P).
+
+restockE(Resource, Qty):>   \+ owns(Resource, Q),
+                            assert(owns(Resource, Qty)),
+                            format('Refilled ~w by ~w, now at ~w~n', [Resource, Qty, Qty]),
+                            update_coordinator(Resource, Qty).
+
+/* Delete owns facts for empty material reserves */
+ownsI(Resource, 0):> retract(owns(Resource, 0)).
